@@ -19,13 +19,13 @@ const MetricCard: React.FC<{
   icon?: React.ReactNode;
   trend?: string;
 }> = ({ label, value, subValue, icon }) => (
-  <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-start justify-between">
-    <div>
-      <p className="text-slate-500 text-sm font-medium mb-1">{label}</p>
-      <h3 className="text-2xl font-bold text-slate-800">{value}</h3>
-      {subValue && <p className="text-slate-400 text-xs mt-1">{subValue}</p>}
+  <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-start justify-between min-w-0">
+    <div className="min-w-0">
+      <p className="text-slate-500 text-sm font-medium mb-1 truncate">{label}</p>
+      <h3 className="text-2xl font-bold text-slate-800 truncate">{value}</h3>
+      {subValue && <p className="text-slate-400 text-xs mt-1 truncate">{subValue}</p>}
     </div>
-    {icon && <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">{icon}</div>}
+    {icon && <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600 flex-shrink-0">{icon}</div>}
   </div>
 );
 
@@ -35,54 +35,57 @@ const DerivedCPIDashboard: React.FC<{
   formatCurrency: (n:number)=>string 
 }> = ({ results, channels, formatCurrency }) => {
   return (
-    <div className="bg-white rounded-xl border border-indigo-100 shadow-sm p-6 overflow-hidden relative">
-      <div className="absolute top-0 right-0 p-3 opacity-5 pointer-events-none">
-        <Calculator size={120} />
+    <div className="bg-white rounded-xl border border-indigo-100 shadow-sm relative w-full">
+      {/* Background Icon Container - Isolated to prevent overflow issues */}
+      <div className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none">
+        <div className="absolute -top-4 -right-4 p-3 opacity-5 text-slate-900">
+          <Calculator size={140} />
+        </div>
       </div>
       
-      <div className="relative z-10">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div>
+      <div className="relative z-10 p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+          <div className="min-w-0">
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <span className="bg-indigo-100 text-indigo-600 p-1.5 rounded-lg"><Calculator size={18}/></span>
-              Derived CPI Analysis
+              <span className="bg-indigo-100 text-indigo-600 p-1.5 rounded-lg flex-shrink-0"><Calculator size={18}/></span>
+              <span className="truncate">Derived CPI Analysis</span>
             </h3>
             <p className="text-sm text-slate-500 mt-1">
               Calculating acquisition costs based on channel efficiency metrics.
             </p>
           </div>
           
-          <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white p-4 rounded-xl shadow-lg min-w-[200px]">
+          <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white p-4 rounded-xl shadow-lg min-w-[200px] flex-shrink-0">
              <div className="text-indigo-100 text-xs font-bold uppercase tracking-wider mb-1">Overall Weighted CPI</div>
-             <div className="text-3xl font-bold">{formatCurrency(results.overallWeightedCPI)}</div>
+             <div className="text-3xl font-bold truncate">{formatCurrency(results.overallWeightedCPI)}</div>
              <div className="text-indigo-200 text-xs mt-1">Across all channels</div>
           </div>
         </div>
 
         {/* Calculation Flow */}
-        <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 mb-6 overflow-x-auto">
-           <div className="flex items-center min-w-max gap-3 text-sm justify-between md:justify-center">
-              <div className="flex flex-col items-center p-3 bg-white rounded border border-slate-200 shadow-sm w-28">
+        <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 mb-6 w-full overflow-x-auto">
+           <div className="flex items-center min-w-max gap-2 sm:gap-3 text-sm justify-between md:justify-center">
+              <div className="flex flex-col items-center p-3 bg-white rounded border border-slate-200 shadow-sm w-24 sm:w-28">
                  <span className="font-bold text-slate-700">CPM</span>
                  <span className="text-[10px] text-slate-400">Cost / 1k Impr</span>
               </div>
               
-              <div className="text-slate-400 flex flex-col items-center px-2">
+              <div className="text-slate-400 flex flex-col items-center px-1 sm:px-2">
                  <ArrowRight size={16} />
                  <span className="text-[10px] whitespace-nowrap mt-1 text-slate-500 font-medium">÷ (1000 × CTR)</span>
               </div>
 
-              <div className="flex flex-col items-center p-3 bg-white rounded border border-slate-200 shadow-sm w-28">
+              <div className="flex flex-col items-center p-3 bg-white rounded border border-slate-200 shadow-sm w-24 sm:w-28">
                  <span className="font-bold text-slate-700">CPC</span>
                  <span className="text-[10px] text-slate-400">Cost Per Click</span>
               </div>
 
-              <div className="text-slate-400 flex flex-col items-center px-2">
+              <div className="text-slate-400 flex flex-col items-center px-1 sm:px-2">
                  <ArrowRight size={16} />
                  <span className="text-[10px] whitespace-nowrap mt-1 text-slate-500 font-medium">÷ Install Rate</span>
               </div>
 
-              <div className="flex flex-col items-center p-3 bg-indigo-50 border border-indigo-200 shadow-sm w-28">
+              <div className="flex flex-col items-center p-3 bg-indigo-50 border border-indigo-200 shadow-sm w-24 sm:w-28">
                  <span className="font-bold text-indigo-700">CPI</span>
                  <span className="text-[10px] text-indigo-400">Cost Per Install</span>
               </div>
@@ -95,9 +98,9 @@ const DerivedCPIDashboard: React.FC<{
               const metrics = results.derivedMetrics[ch.name];
               if (!metrics) return null;
               return (
-                <div key={ch.id} className="bg-white border border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-all hover:shadow-md">
+                <div key={ch.id} className="bg-white border border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-all hover:shadow-md w-full">
                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-50">
-                      <span className="font-bold text-slate-700 truncate mr-2" title={ch.name}>{ch.name}</span>
+                      <span className="font-bold text-slate-700 truncate mr-2 max-w-[100px]" title={ch.name}>{ch.name}</span>
                       <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap">{(ch.allocation * 100).toFixed(0)}% Mix</span>
                    </div>
                    
@@ -193,20 +196,20 @@ const App: React.FC = () => {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="bg-indigo-600 p-2 rounded-lg">
+            <div className="bg-indigo-600 p-2 rounded-lg flex-shrink-0">
               <LayoutDashboard size={20} className="text-white" />
             </div>
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
+            <h1 className="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600 truncate">
               Media Plan Modeler
             </h1>
           </div>
           <div className="flex items-center gap-4">
-             <div className="text-sm text-slate-500 hidden sm:block">
+             <div className="text-sm text-slate-500 hidden md:block">
                Projected Spend: <span className="font-semibold text-slate-900">{formatCurrency(results.totals.spend)}</span>
              </div>
              <button
                onClick={() => exportToCsv(globalConfig, channels, results)}
-               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm text-sm font-medium"
+               className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm text-sm font-medium whitespace-nowrap"
              >
                <Download size={16} />
                Export CSV
@@ -218,7 +221,7 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* Top KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <MetricCard 
             label="Total Spend" 
             value={formatCurrency(results.totals.spend)} 
@@ -376,7 +379,7 @@ const App: React.FC = () => {
                         type="text"
                         value={ch.name}
                         onChange={(e) => updateChannel(ch.id, 'name', e.target.value)}
-                        className="bg-transparent border-b border-dashed border-slate-400 focus:border-indigo-600 focus:outline-none px-1 py-0.5 w-32 font-bold text-slate-700 hover:border-slate-600 transition-colors"
+                        className="bg-transparent border-b border-dashed border-slate-400 focus:border-indigo-600 focus:outline-none px-1 py-0.5 w-28 sm:w-32 font-bold text-slate-700 hover:border-slate-600 transition-colors"
                       />
                       <div className="flex items-center gap-2">
                          <button 
@@ -391,7 +394,7 @@ const App: React.FC = () => {
                           min="0" max="1" step="0.01"
                           value={ch.allocation}
                           onChange={(e) => updateChannel(ch.id, 'allocation', parseFloat(e.target.value))}
-                          className="w-20 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                          className="w-16 sm:w-20 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                         />
                         <span className="text-sm font-mono text-slate-600 w-9 text-right">{(ch.allocation * 100).toFixed(0)}%</span>
                       </div>
@@ -449,7 +452,7 @@ const App: React.FC = () => {
           </div>
 
           {/* RIGHT COLUMN: Visuals */}
-          <div className="xl:col-span-8 space-y-8">
+          <div className="xl:col-span-8 space-y-8 min-w-0">
             
             {/* Derived CPI Dashboard */}
             {globalConfig.mode === 'derive_cpi' && (
@@ -460,7 +463,7 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
               {/* Chart 1: Cumulative Onboard */}
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80">
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80 min-w-0">
                 <h3 className="font-semibold text-slate-700 mb-4">Cumulative Onboarded Users</h3>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={results.monthlyData}>
@@ -477,7 +480,7 @@ const App: React.FC = () => {
               </div>
 
               {/* Chart 2: Stacked Spend */}
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80">
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80 min-w-0">
                 <h3 className="font-semibold text-slate-700 mb-4">Monthly Spend by Channel</h3>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={results.monthlyData}>
@@ -506,7 +509,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Table Section */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-w-0">
               <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                 <h3 className="font-semibold text-slate-700">Monthly Breakdown</h3>
                 <span className="text-xs text-slate-500 italic">Values generated based on current inputs</span>
