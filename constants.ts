@@ -28,6 +28,10 @@ export const EXPLANATIONS = {
   chCPI: "Cost Per Install for this channel (Fixed or Derived).",
   chInstalls: "Volume of installs driven by this channel.",
   chOnboard: "Users onboarded attributed to this channel.",
+  // Pacing & Efficiency
+  pacingMode: "Choose how your target is distributed: 'Linear' (even split) or 'Growth' (ramps up over time).",
+  monthlyGrowthRate: "For Growth pacing: The percentage increase in onboard targets month-over-month.",
+  efficiencyRate: "Efficiency Gain: Percentage reduction in CPI each month (simulating optimization or organic lift).",
 };
 
 export const COLORS = {

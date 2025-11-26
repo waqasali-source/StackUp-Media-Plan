@@ -1,13 +1,15 @@
 export interface ChannelConfig {
   id: string;
   name: string;
-  allocation: number; // 0.0 to 1.0
+  allocation: number; // 0.0 to 1.0 (Global Default)
+  monthlyAllocations?: number[]; // Array of 0.0 to 1.0, index matches month index
   ctr: number; // 0.013 = 1.3%
   installRate: number; // 0.20 = 20%
   cpm: number; // Dollars
 }
 
 export type CalculationMode = 'fixed_cpi' | 'derive_cpi';
+export type PacingMode = 'linear' | 'growth';
 
 export interface GlobalConfig {
   targetOnboard: number;
@@ -15,6 +17,10 @@ export interface GlobalConfig {
   mode: CalculationMode;
   fixedCPI: number;
   installsPerOnboard: number;
+  pacingMode: PacingMode;
+  monthlyGrowthRate: number; // Percentage 0-100
+  efficiencyRate: number; // Percentage 0-100 (CPI reduction per month)
+  enableMonthlyAllocation: boolean; // Toggle for advanced matrix
 }
 
 export interface MonthlyData {

@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
   LineChart, Line
 } from 'recharts';
-import { Settings, Users, DollarSign, Activity, Download, LayoutDashboard, Plus, Trash2, ArrowRight, Calculator, Target } from 'lucide-react';
+import { Settings, Users, DollarSign, Activity, Download, LayoutDashboard, Plus, Trash2, ArrowRight, Calculator, Target, TrendingUp, Calendar, AlertCircle } from 'lucide-react';
 
 import { ChannelConfig, GlobalConfig, ModelResult } from './types';
 import { DEFAULT_CHANNELS, EXPLANATIONS, COLORS } from './constants';
@@ -58,7 +58,7 @@ const DerivedCPIDashboard: React.FC<{
           <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white p-4 rounded-xl shadow-lg min-w-[200px] flex-shrink-0">
              <div className="text-indigo-100 text-xs font-bold uppercase tracking-wider mb-1">Overall Weighted CPI</div>
              <div className="text-3xl font-bold truncate">{formatCurrency(results.overallWeightedCPI)}</div>
-             <div className="text-indigo-200 text-xs mt-1">Across all channels</div>
+             <div className="text-indigo-200 text-xs mt-1">Baseline (Month 1)</div>
           </div>
         </div>
 
@@ -101,7 +101,7 @@ const DerivedCPIDashboard: React.FC<{
                 <div key={ch.id} className="bg-white border border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-all hover:shadow-md w-full">
                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-50">
                       <span className="font-bold text-slate-700 truncate mr-2 max-w-[100px]" title={ch.name}>{ch.name}</span>
-                      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap">{(ch.allocation * 100).toFixed(0)}% Mix</span>
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap">{(ch.allocation * 100).toFixed(0)}% Avg</span>
                    </div>
                    
                    <div className="space-y-3">
@@ -146,10 +146,28 @@ const App: React.FC = () => {
     timeframeMonths: 12,
     mode: 'fixed_cpi',
     fixedCPI: 5.36,
-    installsPerOnboard: 10
+    installsPerOnboard: 10,
+    pacingMode: 'linear',
+    monthlyGrowthRate: 0,
+    efficiencyRate: 0,
+    enableMonthlyAllocation: false
   });
 
   const [channels, setChannels] = useState<ChannelConfig[]>(DEFAULT_CHANNELS);
+
+  // Initialize monthly allocations if missing
+  useEffect(() => {
+    setChannels(prev => prev.map(ch => {
+      if (!ch.monthlyAllocations || ch.monthlyAllocations.length !== globalConfig.timeframeMonths) {
+        // Prefill with current global allocation if monthly not set
+        return {
+          ...ch,
+          monthlyAllocations: new Array(globalConfig.timeframeMonths).fill(ch.allocation)
+        };
+      }
+      return ch;
+    }));
+  }, [globalConfig.timeframeMonths, globalConfig.enableMonthlyAllocation]);
 
   // --- Derived State (Calculation) ---
   const results = useMemo(() => {
@@ -161,12 +179,24 @@ const App: React.FC = () => {
     setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, [field]: value } : ch));
   };
 
+  const updateMonthlyAllocation = (channelId: string, monthIndex: number, value: number) => {
+    setChannels(prev => prev.map(ch => {
+      if (ch.id === channelId) {
+        const newAlloc = [...(ch.monthlyAllocations || [])];
+        newAlloc[monthIndex] = value;
+        return { ...ch, monthlyAllocations: newAlloc };
+      }
+      return ch;
+    }));
+  };
+
   const handleAddChannel = () => {
     const newId = `custom-${Date.now()}`;
     const newChannel: ChannelConfig = {
       id: newId,
       name: `New Channel ${channels.length + 1}`,
       allocation: 0,
+      monthlyAllocations: new Array(globalConfig.timeframeMonths).fill(0),
       ctr: 0.01,
       installRate: 0.1,
       cpm: 10
@@ -187,7 +217,6 @@ const App: React.FC = () => {
   // --- Formatter ---
   const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
   const formatNumber = (val: number) => new Intl.NumberFormat('en-US').format(Math.round(val));
-  const formatPercent = (val: number) => `${(val * 100).toFixed(1)}%`;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
@@ -249,7 +278,7 @@ const App: React.FC = () => {
            <MetricCard 
             label="Impressions Needed" 
             value={(results.totals.impressions / 1000000).toFixed(1) + 'M'}
-            subValue={`CTR Est: ${((results.totals.clicks / results.totals.impressions) * 100).toFixed(2)}%`}
+            subValue={`CTR Est: ${results.totals.impressions > 0 ? ((results.totals.clicks / results.totals.impressions) * 100).toFixed(2) : 0}%`}
             icon={<Activity size={20} />} 
           />
         </div>
@@ -306,6 +335,74 @@ const App: React.FC = () => {
                   />
                 </div>
 
+                {/* Pacing & Efficiency */}
+                <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <TrendingUp size={16} className="text-indigo-500" />
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Adv. Pacing & Efficiency</label>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {/* Pacing Toggle */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5 flex items-center">
+                        Pacing Style <InfoIcon text={EXPLANATIONS.pacingMode} />
+                      </label>
+                      <div className="flex bg-white p-1 rounded-lg border border-slate-200">
+                         <button 
+                            onClick={() => setGlobalConfig({...globalConfig, pacingMode: 'linear'})}
+                            className={`flex-1 py-1 text-xs font-medium rounded-md transition-all ${globalConfig.pacingMode === 'linear' ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                         >
+                           Linear
+                         </button>
+                         <button 
+                            onClick={() => setGlobalConfig({...globalConfig, pacingMode: 'growth'})}
+                            className={`flex-1 py-1 text-xs font-medium rounded-md transition-all ${globalConfig.pacingMode === 'growth' ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                         >
+                           Growth
+                         </button>
+                      </div>
+                    </div>
+
+                    {/* Growth Rate */}
+                    {globalConfig.pacingMode === 'growth' && (
+                      <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                        <label className="flex items-center text-xs font-medium text-slate-600 mb-1">
+                          MoM Growth (%) <InfoIcon text={EXPLANATIONS.monthlyGrowthRate} />
+                        </label>
+                        <div className="flex items-center">
+                           <input 
+                             type="number" 
+                             min="0"
+                             className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-sm"
+                             value={globalConfig.monthlyGrowthRate}
+                             onChange={(e) => setGlobalConfig({...globalConfig, monthlyGrowthRate: Number(e.target.value)})}
+                           />
+                           <span className="ml-2 text-sm text-slate-400">%</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Efficiency Gain */}
+                    <div>
+                      <label className="flex items-center text-xs font-medium text-slate-600 mb-1">
+                         Efficiency Gain (MoM) <InfoIcon text={EXPLANATIONS.efficiencyRate} />
+                      </label>
+                      <div className="flex items-center">
+                        <input 
+                          type="number" 
+                          min="0" max="100" step="0.5"
+                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-sm"
+                          value={globalConfig.efficiencyRate}
+                          onChange={(e) => setGlobalConfig({...globalConfig, efficiencyRate: Number(e.target.value)})}
+                        />
+                         <span className="ml-2 text-sm text-slate-400">%</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Reduces CPI by this % each month</p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Calculation Mode */}
                 <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Cost Calculation Mode</label>
@@ -351,102 +448,200 @@ const App: React.FC = () => {
 
             {/* Channels */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <Activity className="text-slate-400" size={18} />
-                  <h2 className="font-semibold text-lg">Channel Mix</h2>
+              <div className="flex flex-col gap-4 mb-6 pb-4 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                    <Activity className="text-slate-400" size={18} />
+                    <h2 className="font-semibold text-lg">Channel Mix</h2>
+                    </div>
+                    <div className="flex items-center gap-3">
+                    <button 
+                        onClick={handleAddChannel}
+                        className="p-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"
+                        title="Add Channel"
+                    >
+                        <Plus size={16} />
+                    </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className={`text-xs px-2 py-1 rounded font-mono font-medium ${Math.abs(totalAllocation - 1) < 0.001 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {Math.round(totalAllocation * 100)}%
-                  </div>
-                  <button 
-                    onClick={handleAddChannel}
-                    className="p-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors"
-                    title="Add Channel"
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              </div>
 
-              <div className="space-y-6">
-                {channels.map((ch) => (
-                  <div key={ch.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md hover:border-indigo-100 transition-all duration-200 group">
-                    {/* Header: Name + Allocation */}
-                    <div className="flex items-center justify-between mb-3">
-                      <input
-                        type="text"
-                        value={ch.name}
-                        onChange={(e) => updateChannel(ch.id, 'name', e.target.value)}
-                        className="bg-transparent border-b border-dashed border-slate-400 focus:border-indigo-600 focus:outline-none px-1 py-0.5 w-28 sm:w-32 font-bold text-slate-700 hover:border-slate-600 transition-colors"
-                      />
-                      <div className="flex items-center gap-2">
-                         <button 
-                            onClick={() => handleRemoveChannel(ch.id)}
-                            className="text-slate-300 hover:text-red-500 transition-colors mr-1 opacity-0 group-hover:opacity-100"
-                            title="Remove Channel"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                {/* Monthly Allocation Toggle */}
+                <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2">
+                        <Calendar size={16} className="text-slate-500" />
+                        <span className="text-sm font-medium text-slate-700">Enable Monthly Overrides</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
                         <input 
-                          type="range" 
-                          min="0" max="1" step="0.01"
-                          value={ch.allocation}
-                          onChange={(e) => updateChannel(ch.id, 'allocation', parseFloat(e.target.value))}
-                          className="w-16 sm:w-20 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                            type="checkbox" 
+                            className="sr-only peer"
+                            checked={globalConfig.enableMonthlyAllocation}
+                            onChange={(e) => setGlobalConfig({...globalConfig, enableMonthlyAllocation: e.target.checked})}
                         />
-                        <span className="text-sm font-mono text-slate-600 w-9 text-right">{(ch.allocation * 100).toFixed(0)}%</span>
-                      </div>
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                </div>
+              </div>
+
+              {globalConfig.enableMonthlyAllocation ? (
+                /* MATRIX VIEW */
+                <div className="space-y-4 animate-in fade-in duration-300">
+                    <p className="text-xs text-slate-500 italic mb-2">
+                        Define allocation percentages (0-1) for each channel per month. Values are normalized per month automatically.
+                    </p>
+                    
+                    <div className="overflow-x-auto pb-2 custom-scrollbar">
+                        <table className="w-full text-xs text-left border-collapse min-w-[600px]">
+                            <thead>
+                                <tr className="bg-slate-50 border-b border-slate-200">
+                                    <th className="px-3 py-2 font-medium sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Channel</th>
+                                    {Array.from({ length: globalConfig.timeframeMonths }).map((_, i) => (
+                                        <th key={i} className="px-2 py-2 font-medium text-center min-w-[50px]">
+                                            Mo {i + 1}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {channels.map((ch) => (
+                                    <tr key={ch.id} className="border-b border-slate-100">
+                                        <td className="px-3 py-2 font-medium text-slate-700 sticky left-0 bg-white border-r border-slate-200 max-w-[140px] group">
+                                            <div className="flex items-center justify-between gap-1">
+                                                <span className="truncate" title={ch.name}>{ch.name}</span>
+                                                <button 
+                                                    onClick={() => handleRemoveChannel(ch.id)}
+                                                    className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded hover:bg-red-50"
+                                                    title="Remove Channel"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                        {Array.from({ length: globalConfig.timeframeMonths }).map((_, i) => (
+                                            <td key={i} className="px-1 py-1">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.1"
+                                                    value={ch.monthlyAllocations?.[i] !== undefined ? ch.monthlyAllocations[i] : ch.allocation}
+                                                    onChange={(e) => updateMonthlyAllocation(ch.id, i, parseFloat(e.target.value) || 0)}
+                                                    className="w-full px-1 py-1 text-center bg-slate-50 border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                                />
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                                {/* Total Row Check */}
+                                <tr className="bg-slate-50 font-medium">
+                                    <td className="px-3 py-2 text-slate-500 sticky left-0 bg-slate-50 border-r border-slate-200">
+                                        Total
+                                    </td>
+                                    {Array.from({ length: globalConfig.timeframeMonths }).map((_, i) => {
+                                        const total = channels.reduce((sum, ch) => sum + ((ch.monthlyAllocations?.[i] !== undefined) ? ch.monthlyAllocations[i] : ch.allocation), 0);
+                                        const isMismatch = Math.abs(total - 1) > 0.01 && Math.abs(total - 100) > 0.1; // Check for ~1.0 or ~100
+                                        return (
+                                            <td key={i} className={`px-2 py-2 text-center ${isMismatch ? 'text-amber-600' : 'text-green-600'}`}>
+                                                {total.toFixed(1)}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
 
-                    {/* Metrics Grid */}
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                         <label className="flex items-center text-[10px] uppercase font-bold text-slate-400 mb-1">
-                           CTR <InfoIcon text={EXPLANATIONS.ctr} size={10} />
-                         </label>
-                         <input 
-                            type="number" step="0.001"
-                            value={ch.ctr}
-                            onChange={(e) => updateChannel(ch.id, 'ctr', parseFloat(e.target.value))}
-                            className="w-full p-1.5 text-sm border border-slate-200 rounded bg-white focus:border-indigo-500 focus:outline-none"
-                         />
-                      </div>
-                      <div>
-                         <label className="flex items-center text-[10px] uppercase font-bold text-slate-400 mb-1">
-                           Inst. Rate <InfoIcon text={EXPLANATIONS.installRate} size={10} />
-                         </label>
-                         <input 
-                            type="number" step="0.01"
-                            value={ch.installRate}
-                            onChange={(e) => updateChannel(ch.id, 'installRate', parseFloat(e.target.value))}
-                            className="w-full p-1.5 text-sm border border-slate-200 rounded bg-white focus:border-indigo-500 focus:outline-none"
-                         />
-                      </div>
-                      <div className={globalConfig.mode === 'fixed_cpi' ? 'opacity-50 grayscale' : ''}>
-                         <label className="flex items-center text-[10px] uppercase font-bold text-slate-400 mb-1">
-                           CPM ($) <InfoIcon text={EXPLANATIONS.cpm} size={10} />
-                         </label>
-                         <input 
-                            type="number" step="0.5"
-                            value={ch.cpm}
-                            onChange={(e) => updateChannel(ch.id, 'cpm', parseFloat(e.target.value))}
-                            className="w-full p-1.5 text-sm border border-slate-200 rounded bg-white focus:border-indigo-500 focus:outline-none"
-                         />
-                      </div>
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-2 mt-2">
+                        <AlertCircle className="text-blue-500 flex-shrink-0 mt-0.5" size={16} />
+                        <p className="text-xs text-blue-700">
+                            <strong>Note:</strong> You can enter values as decimals (0.5) or whole numbers (50). The system normalizes each month column to 100% automatically during calculation.
+                        </p>
                     </div>
-                    
-                    {/* Derived Info Preview */}
-                    {globalConfig.mode === 'derive_cpi' && (
-                       <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between text-xs text-slate-500">
-                          <span>CPC: <b>{formatCurrency(results.derivedMetrics[ch.name].cpc)}</b></span>
-                          <span className="flex items-center">CPI: <b className="ml-1">{formatCurrency(results.derivedMetrics[ch.name].cpi)}</b> <InfoIcon text={EXPLANATIONS.derivedCPI} size={10} /></span>
-                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                </div>
+              ) : (
+                /* SLIDER VIEW (Standard) */
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="flex items-center justify-end mb-2">
+                         <div className={`text-xs px-2 py-1 rounded font-mono font-medium ${Math.abs(totalAllocation - 1) < 0.001 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                            Global Mix: {Math.round(totalAllocation * 100)}%
+                        </div>
+                    </div>
+                    {channels.map((ch) => (
+                    <div key={ch.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md hover:border-indigo-100 transition-all duration-200 group">
+                        {/* Header: Name + Allocation */}
+                        <div className="flex items-center justify-between mb-3">
+                        <input
+                            type="text"
+                            value={ch.name}
+                            onChange={(e) => updateChannel(ch.id, 'name', e.target.value)}
+                            className="bg-transparent border-b border-dashed border-slate-400 focus:border-indigo-600 focus:outline-none px-1 py-0.5 w-28 sm:w-32 font-bold text-slate-700 hover:border-slate-600 transition-colors"
+                        />
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => handleRemoveChannel(ch.id)}
+                                className="text-slate-300 hover:text-red-500 transition-colors mr-1 opacity-0 group-hover:opacity-100"
+                                title="Remove Channel"
+                            >
+                                <Trash2 size={14} />
+                            </button>
+                            <input 
+                            type="range" 
+                            min="0" max="1" step="0.01"
+                            value={ch.allocation}
+                            onChange={(e) => updateChannel(ch.id, 'allocation', parseFloat(e.target.value))}
+                            className="w-16 sm:w-20 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                            />
+                            <span className="text-sm font-mono text-slate-600 w-9 text-right">{(ch.allocation * 100).toFixed(0)}%</span>
+                        </div>
+                        </div>
+
+                        {/* Metrics Grid */}
+                        <div className="grid grid-cols-3 gap-3">
+                        <div>
+                            <label className="flex items-center text-[10px] uppercase font-bold text-slate-400 mb-1">
+                            CTR <InfoIcon text={EXPLANATIONS.ctr} size={10} />
+                            </label>
+                            <input 
+                                type="number" step="0.001"
+                                value={ch.ctr}
+                                onChange={(e) => updateChannel(ch.id, 'ctr', parseFloat(e.target.value))}
+                                className="w-full p-1.5 text-sm border border-slate-200 rounded bg-white focus:border-indigo-500 focus:outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="flex items-center text-[10px] uppercase font-bold text-slate-400 mb-1">
+                            Inst. Rate <InfoIcon text={EXPLANATIONS.installRate} size={10} />
+                            </label>
+                            <input 
+                                type="number" step="0.01"
+                                value={ch.installRate}
+                                onChange={(e) => updateChannel(ch.id, 'installRate', parseFloat(e.target.value))}
+                                className="w-full p-1.5 text-sm border border-slate-200 rounded bg-white focus:border-indigo-500 focus:outline-none"
+                            />
+                        </div>
+                        <div className={globalConfig.mode === 'fixed_cpi' ? 'opacity-50 grayscale' : ''}>
+                            <label className="flex items-center text-[10px] uppercase font-bold text-slate-400 mb-1">
+                            CPM ($) <InfoIcon text={EXPLANATIONS.cpm} size={10} />
+                            </label>
+                            <input 
+                                type="number" step="0.5"
+                                value={ch.cpm}
+                                onChange={(e) => updateChannel(ch.id, 'cpm', parseFloat(e.target.value))}
+                                className="w-full p-1.5 text-sm border border-slate-200 rounded bg-white focus:border-indigo-500 focus:outline-none"
+                            />
+                        </div>
+                        </div>
+                        
+                        {/* Derived Info Preview */}
+                        {globalConfig.mode === 'derive_cpi' && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between text-xs text-slate-500">
+                            <span>CPC: <b>{formatCurrency(results.derivedMetrics[ch.name].cpc)}</b></span>
+                            <span className="flex items-center">CPI: <b className="ml-1">{formatCurrency(results.derivedMetrics[ch.name].cpi)}</b> <InfoIcon text={EXPLANATIONS.derivedCPI} size={10} /></span>
+                        </div>
+                        )}
+                    </div>
+                    ))}
+                </div>
+              )}
             </div>
 
           </div>
