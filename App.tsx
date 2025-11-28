@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
@@ -20,9 +21,9 @@ const MetricCard: React.FC<{
   trend?: string;
 }> = ({ label, value, subValue, icon }) => (
   <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-start justify-between min-w-0">
-    <div className="min-w-0">
+    <div className="min-w-0 flex-1">
       <p className="text-slate-500 text-sm font-medium mb-1 truncate">{label}</p>
-      <h3 className="text-2xl font-bold text-slate-800 truncate">{value}</h3>
+      <h3 className="text-xl sm:text-2xl font-bold text-slate-800 truncate">{value}</h3>
       {subValue && <p className="text-slate-400 text-xs mt-1 truncate">{subValue}</p>}
     </div>
     {icon && <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600 flex-shrink-0">{icon}</div>}
@@ -58,7 +59,7 @@ const DerivedCPIDashboard: React.FC<{
           <div className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white p-4 rounded-xl shadow-lg min-w-[200px] flex-shrink-0">
              <div className="text-indigo-100 text-xs font-bold uppercase tracking-wider mb-1">Overall Weighted CPI</div>
              <div className="text-3xl font-bold truncate">{formatCurrency(results.overallWeightedCPI)}</div>
-             <div className="text-indigo-200 text-xs mt-1">Baseline (Month 1)</div>
+             <div className="text-indigo-200 text-xs mt-1">Plan Average (Includes Efficiency)</div>
           </div>
         </div>
 
@@ -101,7 +102,8 @@ const DerivedCPIDashboard: React.FC<{
                 <div key={ch.id} className="bg-white border border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-all hover:shadow-md w-full">
                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-50">
                       <span className="font-bold text-slate-700 truncate mr-2 max-w-[100px]" title={ch.name}>{ch.name}</span>
-                      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap">{(ch.allocation * 100).toFixed(0)}% Avg</span>
+                      {/* Uses effective allocation computed in utils (normalized spend share) */}
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap">{(metrics.effectiveAllocation * 100).toFixed(0)}% Avg</span>
                    </div>
                    
                    <div className="space-y-3">
@@ -507,7 +509,12 @@ const App: React.FC = () => {
                                     <tr key={ch.id} className="border-b border-slate-100">
                                         <td className="px-3 py-2 font-medium text-slate-700 sticky left-0 bg-white border-r border-slate-200 max-w-[140px] group">
                                             <div className="flex items-center justify-between gap-1">
-                                                <span className="truncate" title={ch.name}>{ch.name}</span>
+                                                <input
+                                                  type="text"
+                                                  value={ch.name}
+                                                  onChange={(e) => updateChannel(ch.id, 'name', e.target.value)}
+                                                  className="w-full bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-600 focus:outline-none py-0.5 font-bold text-slate-700 text-xs hover:border-slate-400 transition-colors"
+                                                />
                                                 <button 
                                                     onClick={() => handleRemoveChannel(ch.id)}
                                                     className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded hover:bg-red-50"

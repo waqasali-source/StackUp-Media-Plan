@@ -1,3 +1,4 @@
+
 export interface ChannelConfig {
   id: string;
   name: string;
@@ -49,6 +50,7 @@ export interface ModelResult {
     [channelName: string]: {
       cpc: number;
       cpi: number;
+      effectiveAllocation: number; // The actual share of spend (0-1)
     };
   };
   overallWeightedCPI: number;

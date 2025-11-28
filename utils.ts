@@ -1,3 +1,4 @@
+
 import { ChannelConfig, GlobalConfig, ModelResult, MonthlyData } from './types';
 
 export const computeCpc = (cpm: number, ctr: number): number => {
@@ -19,9 +20,11 @@ export const calculateMediaPlan = (
     pacingMode, monthlyGrowthRate, efficiencyRate, enableMonthlyAllocation
   } = globalConfig;
   
-  // Prepare Derived Metrics Baseline
+  // 1. Prepare Derived Metrics Baseline (Per Unit)
   const usingDerived = mode === 'derive_cpi';
-  const derivedMetrics: { [key: string]: { cpc: number; cpi: number } } = {};
+  
+  // Temporary storage for per-channel unit metrics
+  const channelUnitMetrics: { [key: string]: { cpc: number; cpi: number } } = {};
   
   channels.forEach(ch => {
     let cpc = 0;
@@ -32,26 +35,17 @@ export const calculateMediaPlan = (
       cpi = computeCpi(cpc, ch.installRate);
     }
     
-    derivedMetrics[ch.name] = { cpc, cpi };
+    channelUnitMetrics[ch.name] = { cpc, cpi };
   });
 
-  // Calculate Weighted CPI (Global Baseline for UI display mostly)
-  // We normalize global allocations just for this single summary metric
-  const totalGlobalAlloc = channels.reduce((sum, ch) => sum + ch.allocation, 0);
-  let baseOverallCPI = fixedCPI;
-  if (usingDerived) {
-    const weightedSum = channels.reduce((sum, ch) => {
-      const effAlloc = totalGlobalAlloc > 0 ? ch.allocation / totalGlobalAlloc : 1 / channels.length;
-      return sum + (effAlloc * derivedMetrics[ch.name].cpi);
-    }, 0);
-    baseOverallCPI = weightedSum;
-  }
-
-  // --- PACING LOGIC ---
+  // 2. Pacing Logic (Targets per month)
   const monthlyOnboardTargets: number[] = [];
   
   if (pacingMode === 'growth' && monthlyGrowthRate !== 0) {
     const r = 1 + (monthlyGrowthRate / 100);
+    // Formula for sum of geometric series: S = a * (1-r^n) / (1-r)
+    // We need 'a' (firstMonth) such that S = targetOnboard
+    // a = S * (1-r) / (1-r^n)
     const firstMonth = targetOnboard * (1 - r) / (1 - Math.pow(r, timeframeMonths));
     
     let currentTerm = firstMonth;
@@ -60,13 +54,14 @@ export const calculateMediaPlan = (
       currentTerm *= r;
     }
   } else {
+    // Linear
     const val = targetOnboard / timeframeMonths;
     for (let i = 0; i < timeframeMonths; i++) {
       monthlyOnboardTargets.push(val);
     }
   }
 
-  // --- MONTHLY DATA GENERATION ---
+  // 3. Monthly Data Generation
   const monthlyData: MonthlyData[] = [];
   
   let cumOnboard = 0;
@@ -76,6 +71,10 @@ export const calculateMediaPlan = (
   let totalImpressions = 0;
   let totalClicks = 0;
 
+  // Track spend per channel to calculate effective allocation later
+  const channelTotalSpend: { [key: string]: number } = {};
+  channels.forEach(ch => channelTotalSpend[ch.name] = 0);
+
   for (let i = 0; i < timeframeMonths; i++) {
     const monthIndex = i; // 0-based
     const monthNum = i + 1; // 1-based
@@ -83,12 +82,11 @@ export const calculateMediaPlan = (
     const mOnboardTarget = monthlyOnboardTargets[monthIndex];
     const mInstallsTarget = mOnboardTarget * installsPerOnboard;
     
-    // Efficiency Factor
+    // Efficiency Factor: Reduces CPI over time
+    // Efficiency Rate is % gain. So CPI becomes CPI * (1 - rate)^monthIndex
     const efficiencyMultiplier = Math.pow(1 - (efficiencyRate / 100), monthIndex);
     
     // Determine Allocations for this specific month
-    // If enableMonthlyAllocation is true, look at monthlyAllocations array
-    // Else use global ch.allocation
     let currentMonthAllocations: { channel: ChannelConfig, alloc: number }[] = [];
     
     if (enableMonthlyAllocation) {
@@ -107,31 +105,22 @@ export const calculateMediaPlan = (
         }));
     }
 
-    // Normalize for this month
-    const monthTotalAlloc = currentMonthAllocations.reduce((sum, item) => sum + item.alloc, 0);
+    // Normalize allocations for this month
+    const monthTotalAllocPoints = currentMonthAllocations.reduce((sum, item) => sum + item.alloc, 0);
     const normalizedMonthChannels = currentMonthAllocations.map(item => ({
         ...item.channel,
-        effectiveAllocation: monthTotalAlloc > 0 ? item.alloc / monthTotalAlloc : 0
+        effectiveAllocation: monthTotalAllocPoints > 0 ? item.alloc / monthTotalAllocPoints : 0
     }));
 
-    // Calculate Spend
-    let mSpend = 0;
+    // Calculate Spend required for this month
+    // Formula: Total Spend = Total Installs / Sum(Allocation_i / CPI_i)
+    // Derived from: Installs_i = (Spend * Allocation_i) / CPI_i
+    // Total Installs = Spend * Sum(Allocation_i / CPI_i)
     
-    const row: MonthlyData = {
-      month: monthNum,
-      monthLabel: `Mo ${monthNum}`,
-      onboardTarget: mOnboardTarget,
-      installsRequired: mInstallsTarget,
-      monthlySpend: 0,
-      cumulativeOnboard: 0,
-      cumulativeInstalls: 0,
-      cumulativeSpend: 0,
-    };
-
     let weightedEffCpiSumInv = 0; 
     
     normalizedMonthChannels.forEach(ch => {
-      const baseCpi = usingDerived ? derivedMetrics[ch.name].cpi : fixedCPI;
+      const baseCpi = usingDerived ? channelUnitMetrics[ch.name].cpi : fixedCPI;
       const efficientCpi = baseCpi * efficiencyMultiplier;
       
       if (efficientCpi > 0 && ch.effectiveAllocation > 0) {
@@ -139,18 +128,29 @@ export const calculateMediaPlan = (
       }
     });
     
+    let mSpend = 0;
     if (weightedEffCpiSumInv > 0) {
       mSpend = mInstallsTarget / weightedEffCpiSumInv;
     } else {
       mSpend = 0; 
     }
     
-    row.monthlySpend = mSpend;
+    // Build Row Data
+    const row: MonthlyData = {
+      month: monthNum,
+      monthLabel: `Mo ${monthNum}`,
+      onboardTarget: mOnboardTarget,
+      installsRequired: mInstallsTarget,
+      monthlySpend: mSpend,
+      cumulativeOnboard: 0, // set later
+      cumulativeInstalls: 0, // set later
+      cumulativeSpend: 0, // set later
+    };
 
-    // Per channel metrics
+    // Calculate per-channel results
     normalizedMonthChannels.forEach(ch => {
       const chSpend = mSpend * ch.effectiveAllocation;
-      const baseCpi = usingDerived ? derivedMetrics[ch.name].cpi : fixedCPI;
+      const baseCpi = usingDerived ? channelUnitMetrics[ch.name].cpi : fixedCPI;
       const efficientCpi = baseCpi * efficiencyMultiplier;
       
       let chInstalls = 0;
@@ -169,8 +169,10 @@ export const calculateMediaPlan = (
       row[`${ch.name}_Impressions`] = chImpressions;
       row[`${ch.name}_CPI`] = efficientCpi;
       
+      // Accumulate totals
       totalClicks += chClicks;
       totalImpressions += chImpressions;
+      channelTotalSpend[ch.name] += chSpend;
     });
 
     cumOnboard += mOnboardTarget;
@@ -184,6 +186,7 @@ export const calculateMediaPlan = (
     monthlyData.push(row);
   }
 
+  // 4. Final Totals
   const totals = {
     spend: cumSpend,
     installs: cumInstalls,
@@ -193,11 +196,34 @@ export const calculateMediaPlan = (
     avgCPI: cumInstalls > 0 ? cumSpend / cumInstalls : 0
   };
 
+  // 5. Final Derived Metrics (With Effective Allocation)
+  const derivedMetrics: { [key: string]: { cpc: number; cpi: number; effectiveAllocation: number } } = {};
+  
+  channels.forEach(ch => {
+    const unit = channelUnitMetrics[ch.name];
+    // Calculate the effective allocation based on share of wallet
+    const actualShare = cumSpend > 0 ? (channelTotalSpend[ch.name] || 0) / cumSpend : 0;
+    
+    derivedMetrics[ch.name] = {
+      cpc: unit.cpc,
+      cpi: unit.cpi,
+      effectiveAllocation: actualShare
+    };
+  });
+
+  // 6. Overall Weighted CPI for Display
+  // If we are in derived mode, the "True" weighted CPI is the Total Spend / Total Installs
+  // This accounts for efficiency gains and monthly mix changes.
+  let overallWeightedCPI = fixedCPI;
+  if (usingDerived) {
+    overallWeightedCPI = totals.avgCPI;
+  }
+
   return {
     monthlyData,
     totals,
     derivedMetrics,
-    overallWeightedCPI: baseOverallCPI 
+    overallWeightedCPI 
   };
 };
 
@@ -228,10 +254,10 @@ export const exportToCsv = (
 
   // 2. Channel Configuration
   csvContent += "CHANNEL CONFIGURATION (Global Metrics)\n";
-  csvContent += "Channel,Allocation (Global Avg),CTR,Install Rate,CPM,Derived CPI\n";
+  csvContent += "Channel,Allocation (Effective Avg),CTR,Install Rate,CPM,Derived CPI\n";
   channels.forEach(ch => {
-    const metrics = derivedMetrics[ch.name] || { cpc: 0, cpi: globalConfig.fixedCPI };
-    csvContent += `${escape(ch.name)},${(ch.allocation * 100).toFixed(1)}%,${(ch.ctr * 100).toFixed(2)}%,${(ch.installRate * 100).toFixed(1)}%,$${ch.cpm.toFixed(2)},$${metrics.cpi.toFixed(2)}\n`;
+    const metrics = derivedMetrics[ch.name] || { cpc: 0, cpi: globalConfig.fixedCPI, effectiveAllocation: 0 };
+    csvContent += `${escape(ch.name)},${(metrics.effectiveAllocation * 100).toFixed(1)}%,${(ch.ctr * 100).toFixed(2)}%,${(ch.installRate * 100).toFixed(1)}%,$${ch.cpm.toFixed(2)},$${metrics.cpi.toFixed(2)}\n`;
   });
   csvContent += "\n";
 
